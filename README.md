@@ -4,6 +4,10 @@ This repository contains a small FastAPI service used for the Senior Product Sec
 
 Start with `challenge/candidate-brief.md`.
 
+## Public Repository Notice
+
+This service is intentionally vulnerable and uses fake local credentials and seeded test secrets for a security exercise. Do not deploy it as-is or reuse any sample values in production.
+
 ## Setup
 
 Use Python 3.11 or newer.
