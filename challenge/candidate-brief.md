@@ -1,6 +1,6 @@
 # Senior Product Security Engineer Take-Home
 
-You will receive a small Node.js service modeling a simplified records API. Your job is to design CI that protects it, write one piece of custom detection logic, and communicate findings to the engineering team that owns it.
+You will receive a small FastAPI service modeling a simplified records API. Your job is to design CI that protects it, write one piece of custom detection logic, and communicate findings to the engineering team that owns it.
 
 Time: ~ 3 hours
 
