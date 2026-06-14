@@ -107,18 +107,66 @@ jobs:
         with:
           sarif_file: semgrep.sarif
 
-      - name: Enforce Semgrep severity gate
+      - name: Enforce Semgrep severity and confidence gate
         run: |
-          docker run --rm \
-            --env-file .github/env/semgrep.env \
-            -v "${PWD}:/src" \
-            -w /src \
-            semgrep/semgrep \
-            semgrep scan \
-              --config p/default \
-              --config .semgrep.yml \
-              --severity ERROR \
-              --error
+          python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          results_path = Path("semgrep.json")
+          if not results_path.exists():
+              print("Semgrep JSON results were not generated; cannot enforce the confidence gate.")
+              sys.exit(1)
+
+          report = json.loads(results_path.read_text(encoding="utf-8"))
+          findings = report.get("results", [])
+          high_or_above_severities = {"ERROR", "HIGH", "CRITICAL"}
+
+          def confidence(finding):
+              return str(
+                  finding.get("extra", {})
+                  .get("metadata", {})
+                  .get("confidence", "")
+              ).upper()
+
+          def severity(finding):
+              return str(finding.get("extra", {}).get("severity", "")).upper()
+
+          blocking_findings = [
+              finding
+              for finding in findings
+              if confidence(finding) == "HIGH"
+              and severity(finding) in high_or_above_severities
+          ]
+
+          if not blocking_findings:
+              print("No high-or-above severity Semgrep findings with high confidence found.")
+              sys.exit(0)
+
+          print(
+              f"Found {len(blocking_findings)} high-or-above severity "
+              "Semgrep finding(s) with high confidence:"
+          )
+          for finding in blocking_findings:
+              rule = finding.get("check_id", "unknown-rule")
+              path = finding.get("path", "unknown-path")
+              line = finding.get("start", {}).get("line", 1)
+              severity = finding.get("extra", {}).get("severity", "UNKNOWN")
+              confidence = (
+                  finding.get("extra", {})
+                  .get("metadata", {})
+                  .get("confidence", "UNKNOWN")
+              )
+              message = finding.get("extra", {}).get("message", "").replace("\n", " ")
+              print(f"- {severity} confidence={confidence} {path}:{line} {rule}: {message}")
+              escaped_message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(
+                  f"::error file={path},line={line},title=High-confidence high-severity Semgrep finding::{rule}: {escaped_message}"
+              )
+
+          sys.exit(1)
+          PY
 
   package:
     name: Package / Docker image

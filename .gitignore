@@ -4,5 +4,8 @@ __pycache__/
 .pytest_cache/
 semgrep.json
 semgrep.sarif
+semgrep-custom-only.json
+semgrep-default-only.json
 semgrep-report.html
+semgrep-default-only-report.html
 .semgrep-report-server.pid
