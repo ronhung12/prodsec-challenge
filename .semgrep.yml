@@ -81,3 +81,28 @@ rules:
           $CONNECTION.execute($QUERY)
       - pattern: |
           $CONNECTION.execute(f"...")
+
+  - id: jwt-hs256-best-practices
+    languages: [python]
+    severity: WARNING
+    message: >
+      JWT signing is configured with HS256. HS256 uses HMAC-SHA256 and is not
+      inherently weak, but prefer SHA-256-backed asymmetric JWT signing such as
+      RS256, PS256, or ES256 when key separation or third-party verification is
+      needed. If HS256 is required, use a 256-bit or stronger random secret from
+      a secret manager, rotate it, never commit it, restrict accepted algorithms,
+      and validate exp, iss, and aud claims.
+    metadata:
+      category: security
+      confidence: HIGH
+      impact: MEDIUM
+      likelihood: MEDIUM
+      cwe:
+        - "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      technology:
+        - jwt
+        - pyjwt
+      references:
+        - https://pyjwt.readthedocs.io/en/stable/algorithms.html
+        - https://datatracker.ietf.org/doc/html/rfc8725
+    pattern-regex: (?m)^\s*(?:JWT_)?[A-Za-z_]*ALG(?:ORITHM)?[A-Za-z_]*\s*=\s*["']HS256["']
