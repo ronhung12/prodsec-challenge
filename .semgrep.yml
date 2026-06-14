@@ -1,0 +1,63 @@
+rules:
+  - id: fastapi-record-read-without-owner-check
+    languages: [python]
+    severity: ERROR
+    message: >
+      Route reads a record by client-supplied record_id and returns it without
+      checking record ownership or staff access. Authorize the record against
+      current_user before returning it.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      impact: HIGH
+      likelihood: HIGH
+      cwe:
+        - "CWE-639: Authorization Bypass Through User-Controlled Key"
+      technology:
+        - fastapi
+      references:
+        - https://cwe.mitre.org/data/definitions/639.html
+    patterns:
+      - pattern: |
+          $RECORD = db.get_record(record_id)
+          ...
+          return $RECORD
+      - pattern-not: |
+          $RECORD = db.get_record(record_id)
+          ...
+          if current_user.role != "staff" and $RECORD["owner_user_id"] != current_user.id:
+              ...
+          ...
+          return $RECORD
+      - pattern-not: |
+          $RECORD = db.get_record(record_id)
+          ...
+          if $RECORD["owner_user_id"] != current_user.id and current_user.role != "staff":
+              ...
+          ...
+          return $RECORD
+
+  - id: sqlite-query-built-with-f-string
+    languages: [python]
+    severity: WARNING
+    message: >
+      SQL query is built with Python string interpolation before execution.
+      Use parameterized queries so user-controlled input cannot alter SQL.
+    metadata:
+      category: security
+      confidence: HIGH
+      impact: MEDIUM
+      likelihood: HIGH
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      technology:
+        - sqlite
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+    pattern-either:
+      - pattern: |
+          $QUERY = f"..."
+          ...
+          $CONNECTION.execute($QUERY)
+      - pattern: |
+          $CONNECTION.execute(f"...")

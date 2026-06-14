@@ -1,0 +1,11 @@
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+htmlcov
+dist
+build
+semgrep.json
+semgrep.sarif
+semgrep-report.html

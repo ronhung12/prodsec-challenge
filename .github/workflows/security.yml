@@ -2,17 +2,135 @@ name: security
 
 on:
   pull_request:
+    branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI_ENV_FILE: .github/env/ci.env
 
 jobs:
-  test:
+  unit-tests:
+    name: Test / Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - run: python -m pip install --upgrade pip
-      - run: pip install -r requirements.txt
-      - run: python -m unittest discover -s tests
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Load CI environment
+        run: cat "$CI_ENV_FILE" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Compile Python sources
+        run: python -m compileall app tests
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests
+
+  semgrep:
+    name: Test / Semgrep SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate Semgrep SARIF
+        continue-on-error: true
+        run: |
+          docker run --rm \
+            --env-file .github/env/semgrep.env \
+            -v "${PWD}:/src" \
+            -w /src \
+            semgrep/semgrep \
+            semgrep scan \
+              --config p/default \
+              --config .semgrep.yml \
+              --sarif \
+              --output semgrep.sarif
+
+      - name: Generate Semgrep JSON
+        continue-on-error: true
+        run: |
+          docker run --rm \
+            --env-file .github/env/semgrep.env \
+            -v "${PWD}:/src" \
+            -w /src \
+            semgrep/semgrep \
+            semgrep scan \
+              --config p/default \
+              --config .semgrep.yml \
+              --json \
+              --output semgrep.json
+
+      - name: Upload Semgrep result artifacts
+        if: ${{ always() && (hashFiles('semgrep.sarif') != '' || hashFiles('semgrep.json') != '') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: |
+            semgrep.sarif
+            semgrep.json
+          if-no-files-found: ignore
+
+      - name: Upload Semgrep results to code scanning
+        if: ${{ always() && hashFiles('semgrep.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+
+      - name: Enforce Semgrep severity gate
+        run: |
+          docker run --rm \
+            --env-file .github/env/semgrep.env \
+            -v "${PWD}:/src" \
+            -w /src \
+            semgrep/semgrep \
+            semgrep scan \
+              --config p/default \
+              --config .semgrep.yml \
+              --severity ERROR \
+              --error
+
+  package:
+    name: Package / Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [unit-tests, semgrep]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build --tag records-api:${{ github.sha }} .
+
+      - name: Inspect image
+        run: docker image inspect records-api:${{ github.sha }}
