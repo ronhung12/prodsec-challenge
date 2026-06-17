@@ -1,3 +1,5 @@
+# Custom rules use LOW/MEDIUM/HIGH/CRITICAL severity labels. Reserve Semgrep's
+# legacy ERROR label for upstream default rules; the CI gate maps ERROR to HIGH.
 rules:
   - id: fastapi-record-read-without-owner-check
     languages: [python]
@@ -106,3 +108,57 @@ rules:
         - https://pyjwt.readthedocs.io/en/stable/algorithms.html
         - https://datatracker.ietf.org/doc/html/rfc8725
     pattern-regex: (?m)^\s*(?:JWT_)?[A-Za-z_]*ALG(?:ORITHM)?[A-Za-z_]*\s*=\s*["']HS256["']
+
+  - id: hardcoded-api-key-or-secret-in-test
+    languages: [python]
+    severity: MEDIUM
+    message: >
+      Hardcoded API key, token, password, credential, or secret-like value found.
+      Store secrets in a secret manager or environment variable, rotate any value
+      that may have been exposed, and keep test fixtures clearly isolated from
+      runtime configuration.
+    metadata:
+      category: security
+      confidence: HIGH
+      impact: MEDIUM
+      likelihood: HIGH
+      cwe:
+        - "CWE-798: Use of Hard-coded Credentials"
+      technology:
+        - secrets
+      references:
+        - https://cwe.mitre.org/data/definitions/798.html
+    pattern-regex: (?im)^\s*[A-Za-z_][A-Za-z0-9_]*(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY)[A-Za-z0-9_]*\s*=\s*["'][^"']{8,}["']
+
+  - id: test-hardcoded-user-login-credentials
+    languages: [python]
+    severity: MEDIUM
+    message: >
+      Test code uses hardcoded user login credentials. Confirm these are not
+      actual production users and are only isolated test users, or generate
+      dedicated test users and passwords during test runtime instead of storing
+      reusable credentials in source.
+    metadata:
+      category: security
+      confidence: HIGH
+      impact: MEDIUM
+      likelihood: MEDIUM
+      cwe:
+        - "CWE-798: Use of Hard-coded Credentials"
+      technology:
+        - tests
+        - authentication
+      references:
+        - https://cwe.mitre.org/data/definitions/798.html
+    paths:
+      include:
+        - /tests/**/*.py
+        - "**/test_*.py"
+        - "**/*_test.py"
+    pattern-either:
+      - pattern: |
+          login("...", "...")
+      - pattern: |
+          $CLIENT.post("/api/login", json={"email": "...", "password": "..."})
+      - pattern: |
+          $CLIENT.post("/api/login", json={"username": "...", "password": "..."})

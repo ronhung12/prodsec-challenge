@@ -121,7 +121,18 @@ jobs:
 
           report = json.loads(results_path.read_text(encoding="utf-8"))
           findings = report.get("results", [])
-          high_or_above_severities = {"ERROR", "HIGH", "CRITICAL"}
+          # Custom rules use HIGH/CRITICAL for high-or-above findings. Older
+          # Semgrep default rules can still report ERROR for high-severity
+          # findings, so keep ERROR in the blocking set as a legacy alias.
+          severity_rank = {
+              "INFO": 0,
+              "LOW": 1,
+              "WARNING": 1,
+              "MEDIUM": 2,
+              "HIGH": 3,
+              "ERROR": 3,
+              "CRITICAL": 4,
+          }
 
           def confidence(finding):
               return str(
@@ -133,19 +144,24 @@ jobs:
           def severity(finding):
               return str(finding.get("extra", {}).get("severity", "")).upper()
 
+          def is_high_or_above(finding):
+              return severity_rank.get(severity(finding), -1) >= severity_rank["HIGH"]
+
           blocking_findings = [
               finding
               for finding in findings
-              if confidence(finding) == "HIGH"
-              and severity(finding) in high_or_above_severities
+              if confidence(finding) == "HIGH" and is_high_or_above(finding)
           ]
 
           if not blocking_findings:
-              print("No high-or-above severity Semgrep findings with high confidence found.")
+              print(
+                  "No HIGH/CRITICAL or legacy ERROR Semgrep findings "
+                  "with high confidence found."
+              )
               sys.exit(0)
 
           print(
-              f"Found {len(blocking_findings)} high-or-above severity "
+              f"Found {len(blocking_findings)} HIGH/CRITICAL or legacy ERROR "
               "Semgrep finding(s) with high confidence:"
           )
           for finding in blocking_findings:
